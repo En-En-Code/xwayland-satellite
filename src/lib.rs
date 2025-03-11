@@ -7,10 +7,10 @@ pub mod xstate;
 
 use crate::server::{PendingSurfaceState, ServerState};
 use crate::xstate::{RealConnection, XState};
-use log::{error, info};
+use log::{error, info, warn};
 use rustix::event::{poll, PollFd, PollFlags};
 use smithay_client_toolkit::data_device_manager::WritePipe;
-use std::io::{BufRead, BufReader, Read, Write};
+use std::io::{BufRead, BufReader, Write};
 use std::os::fd::{AsFd, AsRawFd, BorrowedFd};
 use std::os::unix::net::UnixStream;
 use std::process::{Command, Stdio};
@@ -77,18 +77,33 @@ pub fn main(data: impl RunData) -> Option<()> {
         .spawn()
         .unwrap();
 
-    let (mut finish_tx, mut finish_rx) = UnixStream::pair().unwrap();
+    let (mut finish_tx, finish_rx) = UnixStream::pair().unwrap();
     let stderr = xwayland.stderr.take().unwrap();
     std::thread::spawn(move || {
         let reader = BufReader::new(stderr);
         for line in reader.lines() {
             let line = line.unwrap();
-            info!(target: "xwayland_process", "{line}");
+            warn!(target: "xwayland_process", "{line}");
         }
-        let status = Box::new(xwayland.wait().unwrap());
-        let status = Box::into_raw(status) as usize;
-        finish_tx.write_all(&status.to_ne_bytes()).unwrap();
+        // If stdout is closed, we reasonably assume Xwayland exited. Use finish_tx to report it
+        finish_tx.write_all(&1_usize.to_ne_bytes()).unwrap();
     });
+
+    struct XwaylandChild(std::process::Child);
+    impl Drop for XwaylandChild {
+        // We need a kill-on-drop implementation for Xwayland processes since an integration test
+        // failure would otherwise leave it running, messing up the setup to the next integration
+        // test.
+        fn drop(&mut self) {
+            let _ = self.0.kill();
+        }
+    }
+    impl XwaylandChild {
+        pub fn wait(&mut self) -> std::io::Result<std::process::ExitStatus> {
+            self.0.wait()
+        }
+    }
+    let mut xwayland = XwaylandChild(xwayland);
 
     let mut ready_fds = [
         PollFd::new(&socket, PollFlags::IN),
@@ -98,12 +113,7 @@ pub fn main(data: impl RunData) -> Option<()> {
     let connection = match poll(&mut ready_fds, -1) {
         Ok(_) => {
             if !ready_fds[1].revents().is_empty() {
-                let mut data = [0; (usize::BITS / 8) as usize];
-                finish_rx.read_exact(&mut data).unwrap();
-                let data = usize::from_ne_bytes(data);
-                let status: Box<std::process::ExitStatus> =
-                    unsafe { Box::from_raw(data as *mut _) };
-
+                let status = Box::new(xwayland.wait().unwrap());
                 error!("Xwayland exited early with {status}");
                 return None;
             }
