@@ -462,7 +462,11 @@ impl Connection {
 
     #[track_caller]
     fn await_selection_request(&mut self) -> x::SelectionRequestEvent {
-        self.await_event();
+        self.pollfd.clear_revents();
+        // Bypassing `await_event` since there is an insidious race condition which can lead to the
+        // expected event in the pipe having already been read. I have no clue why specifically why
+        // copying from X11 leads to this.
+        poll(&mut [self.pollfd.clone()], 100).expect("poll failed");
         match self.poll_for_event().unwrap() {
             Some(xcb::Event::X(x::Event::SelectionRequest(r))) => r,
             other => panic!("Didn't get selection request event, instead got {other:?}"),
