@@ -11,6 +11,7 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
   UBUNTU_DOCKERFILE: .github/workflows/ubuntu.dockerfile
+  ROOT_CARGO_TOML: Cargo.toml
 
 permissions:
   contents: read
@@ -27,15 +28,14 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 2
-          sparse-checkout: .github
+          sparse-checkout: .github ${{ env.ROOT_CARGO_TOML }}
       - id: changed
-        uses: tj-actions/changed-files@v45
-        with:
-          files: ${{ env.UBUNTU_DOCKERFILE }}
+        run: .should-rebuild.sh
+        working-directory: .github/workflows
       - id: name
         run: echo "container_path=${{ env.REGISTRY }}/${GITHUB_REPOSITORY@L}" >> "$GITHUB_OUTPUT"
     outputs:
-      should-build: ${{ steps.changed.outputs.any_changed }}
+      should-build: ${{ steps.changed.outputs.should-build }}
       container-path: ${{ steps.name.outputs.container_path }}
 
   ubuntu-build:
@@ -74,6 +74,8 @@ jobs:
         password: ${{ secrets.GITHUB_TOKEN }}
     steps:
     - uses: actions/checkout@v4
+    - name: Check
+      run: cargo check --keep-going --workspace --exclude xwayland-satellite
     - name: Build
       run: cargo build --release --verbose
     - name: Run tests
