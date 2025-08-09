@@ -69,6 +69,8 @@ jobs:
           push: ${{ github.event_name == 'push' }}
           tags: ${{ needs.pre-build.outputs.container-path }}-ubuntu:latest
           labels: org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          cache-from: |
+            type=registry,ref=${{ needs.pre-build.outputs.container-path }}-ubuntu:latest
         env:
           SOURCE_DATE_EPOCH: ${{ needs.pre-build.outputs.timestamp }}
           MSRV: ${{ needs.pre-build.outputs.msrv }}
