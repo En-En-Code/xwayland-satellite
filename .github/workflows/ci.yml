@@ -73,20 +73,20 @@ jobs:
         env:
           SOURCE_DATE_EPOCH: ${{ env.TIMESTAMP }}
       - name: Start container
-        run: docker run --name xwls-test --detach --interactive --tty \
+        run: docker run --name xwls-test --detach --interactive --tty
           ${{ needs.pre-build.outputs.container-path }}-ubuntu:latest
       - name: Check workspace
-        run: docker exec --interacitve --tty xwls-test \
+        run: docker exec --interacitve --tty xwls-test
           sh -c "cargo check --profile ci --locked --verbose --keep-going --workspace --exclude xwayland-satellite"
       - name: Build
-        run: docker exec --interacitve --tty xwls-test \
+        run: docker exec --interacitve --tty xwls-test
           sh -c "cargo test --no-run --profile ci --locked --verbose"
       - name: Run tests
-        run: docker exec --interacitve --tty xwls-test \
+        run: docker exec --interacitve --tty xwls-test
           sh -c "cargo test --profile ci --locked --verbose --no-fail-fast -- --test-threads 1"
       - name: Format check
-        run: docker exec --interacitve --tty xwls-test \
+        run: docker exec --interacitve --tty xwls-test
           sh -c "cargo fmt --check"
       - name: Clippy
-        run: docker exec --interacitve --tty xwls-test \
+        run: docker exec --interacitve --tty xwls-test
           sh -c "cargo clippy --profile ci --locked --workspace --all-targets"
