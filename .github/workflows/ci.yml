@@ -54,6 +54,8 @@ jobs:
 
     steps:
       - uses: docker/setup-buildx-action@v3
+        with:
+          driver: docker
       - uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
@@ -64,15 +66,9 @@ jobs:
         with:
           file: ${{ env.UBUNTU_DOCKERFILE }}
           pull: true
-          load: true
           push: ${{ github.event_name == 'push' }}
           tags: ${{ needs.pre-build.outputs.container-path }}-ubuntu:latest
           labels: org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-          cache-from: |
-            type=gha
-            type=registry,ref=${{ needs.pre-build.outputs.container-path }}-ubuntu:latest
-          cache-to: |
-            type=gha,mode=max
         env:
           SOURCE_DATE_EPOCH: ${{ needs.pre-build.outputs.timestamp }}
           MSRV: ${{ needs.pre-build.outputs.msrv }}
