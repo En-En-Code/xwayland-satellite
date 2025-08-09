@@ -64,7 +64,6 @@ jobs:
           pull: true
           push: ${{ github.event_name == 'push' }}
           tags: ${{ needs.pre-build.outputs.container-path }}-ubuntu:latest
-          target: toolchain
           labels: org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
           cache-from: |
             type=gha
