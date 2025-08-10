@@ -58,22 +58,41 @@ jobs:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: actions/checkout@v4
-      - id: docker-build-push-registry
-        run: |
-          docker buildx build
-            --cache-from ref=${{ needs.pre-build.outputs.container-path }}-ubuntu:cache
-            --cache-to ref=${{ needs.pre-build.outputs.container-path }}-ubuntu:cache
-            --file ${{ env.UBUNTU_DOCKERFILE }}
-            --labels org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-            --tags ${{ needs.pre-build.outputs.container-path }}-ubuntu:latest
-            --push ${{ github.event_name == 'push' }}
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        id: docker-build-push-registry
+        with:
+          file: ${{ env.UBUNTU_DOCKERFILE }}
+          push: ${{ github.event_name == 'push' }}
+          tags: ${{ needs.pre-build.outputs.container-path }}-ubuntu:latest
+          labels: org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          cache-from: |
+            type=registry,ref=${{ needs.pre-build.outputs.container-path }}-ubuntu:cache
+          cache-to: |
+            type=registry,ref=${{ needs.pre-build.outputs.container-path }}-ubuntu:cache,mode=max
+            type=local
         env:
           SOURCE_DATE_EPOCH: ${{ needs.pre-build.outputs.timestamp }}
           MSRV: ${{ needs.pre-build.outputs.msrv }}
+
+      - uses: docker/setup-buildx-action@v3
+        with:
+          driver: docker
+      - uses: docker/build-push-action@v6
+        id: docker-build-push-image
+        with:
+          file: ${{ env.UBUNTU_DOCKERFILE }}
+          tags: ${{ needs.pre-build.outputs.container-path }}-ubuntu:latest
+          labels: org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          outputs: type=image
+          cache-from: type=local
+        env:
+          SOURCE_DATE_EPOCH: ${{ needs.pre-build.outputs.timestamp }}
+          MSRV: ${{ needs.pre-build.outputs.msrv }}
+
       - name: Start container
         run: docker run --name xwls-test --detach --interactive
-          ${{ steps.docker-build-push-registry.outputs.imageid }}
+          ${{ steps.docker-build-push-image.outputs.imageid }}
       - name: Check workspace
         run: docker exec --interactive xwls-test
           sh -c "cargo check --profile ci --locked --verbose --keep-going --workspace --exclude xwayland-satellite"
