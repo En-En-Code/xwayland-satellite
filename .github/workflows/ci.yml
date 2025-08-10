@@ -64,6 +64,7 @@ jobs:
         with:
           file: ${{ env.UBUNTU_DOCKERFILE }}
           push: ${{ github.event_name == 'push' }}
+          load: true
           tags: ${{ needs.pre-build.outputs.container-path }}-ubuntu:latest
           labels: org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
           cache-from: |
@@ -73,21 +74,9 @@ jobs:
         env:
           SOURCE_DATE_EPOCH: ${{ needs.pre-build.outputs.timestamp }}
           MSRV: ${{ needs.pre-build.outputs.msrv }}
-      - uses: docker/build-push-action@v6
-        id: docker-build-push-image
-        with:
-          file: ${{ env.UBUNTU_DOCKERFILE }}
-          outputs: type=image
-          tags: ${{ needs.pre-build.outputs.container-path }}-ubuntu:latest
-          labels: org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-          cache-from: |
-            type=registry,ref=${{ needs.pre-build.outputs.container-path }}-ubuntu:cache
-        env:
-          SOURCE_DATE_EPOCH: ${{ needs.pre-build.outputs.timestamp }}
-          MSRV: ${{ needs.pre-build.outputs.msrv }}
       - name: Start container
         run: docker run --name xwls-test --detach --interactive
-          ${{ steps.docker-build-push-image.outputs.imageid }}
+          ${{ steps.docker-build-push-registry.outputs.imageid }}
       - name: Check workspace
         run: docker exec --interactive xwls-test
           sh -c "cargo check --profile ci --locked --verbose --keep-going --workspace --exclude xwayland-satellite"
