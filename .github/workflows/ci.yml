@@ -70,7 +70,7 @@ jobs:
             type=registry,ref=${{ needs.pre-build.outputs.container-path }}-ubuntu:cache
           cache-to: |
             type=registry,ref=${{ needs.pre-build.outputs.container-path }}-ubuntu:cache,mode=max
-            type=local
+            type=gha,mode=max
         env:
           SOURCE_DATE_EPOCH: ${{ needs.pre-build.outputs.timestamp }}
           MSRV: ${{ needs.pre-build.outputs.msrv }}
@@ -85,7 +85,7 @@ jobs:
           tags: ${{ needs.pre-build.outputs.container-path }}-ubuntu:latest
           labels: org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
           outputs: type=image
-          cache-from: type=local
+          cache-from: type=gha
         env:
           SOURCE_DATE_EPOCH: ${{ needs.pre-build.outputs.timestamp }}
           MSRV: ${{ needs.pre-build.outputs.msrv }}
