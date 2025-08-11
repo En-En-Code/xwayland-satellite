@@ -13,5 +13,3 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \
 	&& rustup default $MSRV
 RUN mkdir /run/xwls-test
 ENV PATH="/cargo/bin:$PATH" XDG_RUNTIME_DIR="/run/xwls-test"
-COPY . /xwls
-WORKDIR /xwls

@@ -27,7 +27,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 1
-          sparse-checkout: Cargo.toml
       - name: Get commit timestamp
         run: echo "SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct)" >> "$GITHUB_ENV"
       - name: Get MSRV
@@ -45,23 +44,25 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - uses: docker/setup-buildx-action@v3
       - uses: docker/build-push-action@v6
-        id: docker-build-push-registry
         with:
           file: ${{ env.UBUNTU_DOCKERFILE }}
           tags: ${{ steps.image-name.outputs.name }}:latest
           labels: org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
           cache-from: type=registry,ref=${{ steps.image-name.outputs.name }}:cache
           cache-to: |
-            ${{ github.event_name == 'push' &&
+            ${{ (github.event_name == 'push' && false) &&
             format('type=registry,ref={0}:cache,mode=max', steps.image-name.outputs.name) ||
             '' }}
           outputs: |
-            type=image,ref=${{ steps.image-name.outputs.name }}:latest,push=${{ github.event_name == 'push' }}
-      - name: ctr images list
-        run: sudo ctr images list
+            ${{ (github.event_name == 'push' && false) &&
+            format('type=image,ref={0}:latest,push=true', steps.image-name.outputs.name) ||
+            '' }}
+            type=docker
       - name: Start container
         run: docker run --name xwls-test --detach --interactive --tty
           ${{ steps.image-name.outputs.name }}:latest
+      - name: Move code into container
+        run: docker cp "$GITHUB_WORKSPACE" xwls-test:"$GITHUB_WORKSPACE"
       - name: Check workspace
         run: docker exec --interactive xwls-test
           sh -c "cargo check --profile ci --locked --verbose --keep-going --workspace --exclude xwayland-satellite"
