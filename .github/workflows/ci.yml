@@ -53,14 +53,12 @@ jobs:
           file: ${{ env.UBUNTU_DOCKERFILE }}
           tags: ${{ steps.container-path.outputs.path }}-ubuntu:latest
           labels: org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-          cache-from: |
-            type=registry,ref=${{ steps.container-path.outputs.path }}-ubuntu:cache
+          cache-from: type=registry,ref=${{ steps.container-path.outputs.path }}-ubuntu:cache
           cache-to: |
             ${{ github.event_name == 'push' &&
             format('type=registry,ref={0}-ubuntu:cache,mode=max', steps.container-path.outputs.path) ||
             '' }}
-          outputs:
-            type=image,push=${{ github.event_name == 'push' }}
+          outputs: type=image,push=${{ github.event_name == 'push' }}
       # Creating a docker builder to extract the Docker image because it is ~40 seconds faster than
       # extracting it through the docker-container builder, well, at long as it does not rebuild
       - uses: docker/setup-buildx-action@v3
@@ -73,27 +71,23 @@ jobs:
           builder: ${{ steps.image-builder.outputs.name }}
           file: ${{ env.UBUNTU_DOCKERFILE }}
           labels: org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-          cache-from: ${{ steps.container-path.outputs.path }}-ubuntu:latest
+          cache-from: ${{ steps.registry-builder.outputs.imageid }}
           outputs: type=docker
-        env:
-          DOCKER_BUILD_SUMMARY: false
-      - name: List images
-        run: docker images
       - name: Start container
         run: docker run --name xwls-test --detach --interactive --tty
           ${{ steps.docker-build-push-image.outputs.imageid }}
       - name: Check workspace
-        run: docker exec --interactive --tty xwls-test
+        run: docker exec --interactive xwls-test
           sh -c "cargo check --profile ci --locked --verbose --keep-going --workspace --exclude xwayland-satellite"
       - name: Build
-        run: docker exec --interactive --tty xwls-test
+        run: docker exec --interactive xwls-test
           sh -c "cargo test --no-run --profile ci --locked --verbose"
       - name: Run tests
-        run: docker exec --interactive --tty xwls-test
+        run: docker exec --interactive xwls-test
           sh -c "cargo test --profile ci --locked --verbose --no-fail-fast -- --test-threads 1"
       - name: Format check
-        run: docker exec --interactive --tty xwls-test
+        run: docker exec --interactive xwls-test
           sh -c "cargo fmt --check"
       - name: Clippy
-        run: docker exec --interactive --tty xwls-test
+        run: docker exec --interactive xwls-test
           sh -c "cargo clippy --profile ci --locked --workspace --all-targets"
