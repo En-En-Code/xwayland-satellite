@@ -58,7 +58,7 @@ jobs:
           outputs: |
             type=image,ref=${{ steps.image-name.outputs.name }}:latest,push=${{ github.event_name == 'push' }}
       - name: ctr images list
-        run: ctr images list
+        run: sudo ctr images list
       - name: Start container
         run: docker run --name xwls-test --detach --interactive --tty
           ${{ steps.image-name.outputs.name }}:latest
