@@ -9,7 +9,6 @@ on:
 env:
   CARGO_TERM_COLOR: always
   XDG_RUNTIME_DIR: /run/xwls-test
-  DEBIAN_FRONTEND: noninteractive
   TZ: Etc/UTC
 
 permissions:
@@ -49,7 +48,7 @@ jobs:
       - name: Run tests
         run: |
           sudo mkdir "$XDG_RUNTIME_DIR"
-          sudo cargo test --profile ci --locked --verbose -- --test-threads 1 --nocapture
+          sudo /usr/bin/cargo test --profile ci --locked --verbose -- --test-threads 1 --nocapture
       - name: Format check
         run: cargo fmt --check
       - name: Clippy
