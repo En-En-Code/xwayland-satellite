@@ -9,6 +9,10 @@ on:
 env:
   CARGO_TERM_COLOR: always
 
+permissions:
+  contents: read
+  packages: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -17,10 +21,11 @@ jobs:
       packages: read
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
       - name: Get MSRV
         id: msrv
-        run: echo "msrv=$(
+        run: |
+          echo "msrv=$(
           awk '/^rust-version = "[[:digit:]]+\.[[:digit:]]+\.[[:digit:]]+"$/ {
             print substr($NF, 2, length($NF) - 2)
           }' Cargo.toml)" >> "$GITHUB_OUTPUT"
@@ -28,6 +33,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y xwayland clang libxcb1 libxcb-cursor0 libxcb-cursor-dev curl pkg-config libegl1
+        env:
+          DEBIAN_FRONTEND: noninteractive
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ steps.msrv.outputs.msrv }}
