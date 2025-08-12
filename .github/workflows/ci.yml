@@ -8,6 +8,9 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  XDG_RUNTIME_DIR: /run/xwls-test
+  DEBIAN_FRONTEND: noninteractive
+  TZ: Etc/UTC
 
 permissions:
   contents: read
@@ -44,7 +47,9 @@ jobs:
       - name: Build
         run: cargo test --no-run --profile ci --locked --verbose
       - name: Run tests
-        run: cargo test --profile ci --locked --verbose --no-fail-fast -- --test-threads 1
+        run: |
+          mkdir "$XDG_RUNTIME_DIR"
+          cargo test --profile ci --locked --verbose -- --test-threads 1 --nocapture
       - name: Format check
         run: cargo fmt --check
       - name: Clippy
