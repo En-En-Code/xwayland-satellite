@@ -29,6 +29,8 @@ jobs:
           }' Cargo.toml)" >> "$GITHUB_ENV"
       - name: Install dependencies
         run: apt-get update && apt-get install -y xwayland clang libxcb1 libxcb-cursor0 libxcb-cursor-dev pkg-config curl libegl1
+        env:
+          DEBIAN_FRONTEND: noninteractive
       - uses: dtolnay/rust-toolchain@1.83.0
       - uses: Swatinem/rust-cache@v2
       - name: Check workspace
