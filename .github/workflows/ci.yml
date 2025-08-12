@@ -28,7 +28,9 @@ jobs:
             print substr($NF, 2, length($NF) - 2)
           }' Cargo.toml)" >> "$GITHUB_ENV"
       - name: Install dependencies
-        run: apt-get update && apt-get install -y xwayland clang libxcb1 libxcb-cursor0 libxcb-cursor-dev pkg-config curl libegl1
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xwayland clang libxcb1 libxcb-cursor0 libxcb-cursor-dev pkg-config curl libegl1
         env:
           DEBIAN_FRONTEND: noninteractive
       - uses: dtolnay/rust-toolchain@1.83.0
