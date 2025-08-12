@@ -49,7 +49,7 @@ jobs:
       - name: Run tests
         run: |
           sudo mkdir "$XDG_RUNTIME_DIR"
-          cargo test --profile ci --locked --verbose -- --test-threads 1 --nocapture
+          sudo cargo test --profile ci --locked --verbose -- --test-threads 1 --nocapture
       - name: Format check
         run: cargo fmt --check
       - name: Clippy
