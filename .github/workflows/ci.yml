@@ -9,10 +9,6 @@ on:
 env:
   CARGO_TERM_COLOR: always
 
-permissions:
-  contents: read
-  packages: read
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -21,19 +17,20 @@ jobs:
       packages: read
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Get MSRV
-        run: echo "MSRV=$(
+        id: msrv
+        run: echo "msrv=$(
           awk '/^rust-version = "[[:digit:]]+\.[[:digit:]]+\.[[:digit:]]+"$/ {
             print substr($NF, 2, length($NF) - 2)
-          }' Cargo.toml)" >> "$GITHUB_ENV"
+          }' Cargo.toml)" >> "$GITHUB_OUTPUT"
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y xwayland clang libxcb1 libxcb-cursor0 libxcb-cursor-dev pkg-config curl libegl1
-        env:
-          DEBIAN_FRONTEND: noninteractive
-      - uses: dtolnay/rust-toolchain@1.83.0
+          sudo apt-get install -y xwayland clang libxcb1 libxcb-cursor0 libxcb-cursor-dev curl pkg-config libegl1
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.msrv.outputs.msrv }}
       - uses: Swatinem/rust-cache@v2
       - name: Check workspace
         run: cargo check --profile ci --locked --verbose --keep-going --workspace --exclude xwayland-satellite
