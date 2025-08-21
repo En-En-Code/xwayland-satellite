@@ -9,12 +9,8 @@ on:
 env:
   CARGO_TERM_COLOR: always
 
-permissions:
-  contents: read
-  packages: read
-
 jobs:
-  build:
+  ci:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -41,9 +37,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ steps.msrv.outputs.msrv }}
+          components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
-      - name: Check workspace
-        run: cargo check --profile ci --locked --verbose --keep-going --workspace --exclude xwayland-satellite
       - name: Build
         run: cargo test --no-run --profile ci --locked --verbose
       - name: Run tests
