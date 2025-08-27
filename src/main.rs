@@ -1,7 +1,8 @@
 use std::os::fd::{FromRawFd, OwnedFd, RawFd};
 
 fn main() {
-    pretty_env_logger::formatted_timed_builder()
+    env_logger::builder()
+        .format_timestamp_millis()
         .filter_level(log::LevelFilter::Info)
         .parse_default_env()
         .init();
