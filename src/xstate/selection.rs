@@ -11,12 +11,14 @@ use xcb::x;
 #[derive(Debug)]
 struct SelectionTargetId {
     name: String,
-    atom: x::Atom,
+    target: x::Atom,
+    property: x::Atom,
     source: Option<String>,
 }
 
 struct PendingSelectionData {
     target: x::Atom,
+    property: x::Atom,
     pipe: WritePipe,
     incr: bool,
 }
@@ -41,14 +43,15 @@ impl X11Selection for Selection {
 
     fn write_to(&self, mime: &str, pipe: WritePipe) {
         if let Some(target) = self.mimes.iter().find(|target| target.name == mime) {
-            // We use the target as the property to write to
+            // A concatenation of the target and the selection type are used to create a distinct
+            // property to write to (see XState::intern_target_property_atoms).
             if let Err(e) = self
                 .connection
                 .send_and_check_request(&x::ConvertSelection {
                     requestor: self.window,
                     selection: self.selection,
-                    target: target.atom,
-                    property: target.atom,
+                    target: target.target,
+                    property: target.property,
                     time: self.selection_time,
                 })
             {
@@ -57,7 +60,8 @@ impl X11Selection for Selection {
             }
 
             self.pending.borrow_mut().push(PendingSelectionData {
-                target: target.atom,
+                target: target.target,
+                property: target.property,
                 pipe,
                 incr: false,
             })
@@ -82,8 +86,17 @@ impl Selection {
             mut pipe,
             incr,
             target,
+            property,
         } = pending.swap_remove(idx);
-        let reply = match get_property_any(&self.connection, self.window, target) {
+        let request = self.connection.send_request(&x::GetProperty {
+            delete: true,
+            window: self.window,
+            property,
+            r#type: x::ATOM_ANY,
+            long_offset: 0,
+            long_length: u32::MAX,
+        });
+        let reply = match self.connection.wait_for_reply(request) {
             Ok(reply) => reply,
             Err(e) => {
                 warn!(
@@ -95,18 +108,20 @@ impl Selection {
         };
 
         debug!(
-            "got type {} for mime type {}",
+            "got type {} for mime type {} on property {}",
             get_atom_name(&self.connection, reply.r#type()),
-            get_atom_name(&self.connection, target)
+            get_atom_name(&self.connection, target),
+            get_atom_name(&self.connection, property)
         );
 
         if reply.r#type() == self.incr {
             debug!(
                 "beginning incr for {}",
-                get_atom_name(&self.connection, target)
+                get_atom_name(&self.connection, property)
             );
             pending.push(PendingSelectionData {
                 target,
+                property,
                 pipe,
                 incr: true,
             });
@@ -132,6 +147,7 @@ impl Selection {
                 );
                 pending.push(PendingSelectionData {
                     target,
+                    property,
                     pipe,
                     incr: true,
                 })
@@ -151,7 +167,7 @@ impl Selection {
         }
 
         let target = self.pending.borrow().iter().find_map(|pending| {
-            (pending.target == event.atom() && pending.incr).then_some(pending.target)
+            (pending.property == event.atom() && pending.incr).then_some(pending.target)
         });
         if let Some(target) = target {
             self.handle_notify(target);
@@ -332,14 +348,26 @@ impl<T: SelectionType> SelectionDataImpl for SelectionData<T> {
             debug!("got targets: {targets_str:?}");
         }
 
+        let selection = get_atom_name(connection, self.atom);
         let mimes = targets
             .iter()
             .copied()
             .filter(|atom| ![atoms.targets, atoms.multiple, atoms.save_targets].contains(atom))
-            .map(|target_atom| SelectionTargetId {
-                name: get_atom_name(connection, target_atom),
-                atom: target_atom,
-                source: None,
+            .map(|target| {
+                let name = get_atom_name(connection, target);
+                let property = connection
+                    .wait_for_reply(connection.send_request(&x::InternAtom {
+                        only_if_exists: false,
+                        name: &[name.as_bytes(), b"_", selection.as_bytes()].concat(),
+                    }))
+                    .unwrap()
+                    .atom();
+                SelectionTargetId {
+                    name,
+                    target,
+                    property,
+                    source: None,
+                }
             })
             .collect();
 
@@ -382,7 +410,7 @@ impl<T: SelectionType> SelectionDataImpl for SelectionData<T> {
 
         match request.target() {
             x if x == atoms.targets => {
-                let atoms: Box<[x::Atom]> = mimes.iter().map(|t| t.atom).collect();
+                let atoms: Box<[x::Atom]> = mimes.iter().map(|t| t.target).collect();
 
                 connection
                     .send_and_check_request(&x::ChangeProperty {
@@ -397,7 +425,7 @@ impl<T: SelectionType> SelectionDataImpl for SelectionData<T> {
                 success();
             }
             other => {
-                let Some(target) = mimes.iter().find(|t| t.atom == other) else {
+                let Some(target) = mimes.iter().find(|t| t.target == other) else {
                     if log::log_enabled!(log::Level::Debug) {
                         let name = get_atom_name(connection, other);
                         debug!("refusing selection request because given atom could not be found ({name})");
@@ -416,7 +444,7 @@ impl<T: SelectionType> SelectionDataImpl for SelectionData<T> {
                     mode: x::PropMode::Replace,
                     window: request.requestor(),
                     property: request.property(),
-                    r#type: target.atom,
+                    r#type: target.target,
                     data: &data,
                 }) {
                     Ok(_) => success(),
@@ -464,6 +492,26 @@ impl SelectionState {
 }
 
 impl XState {
+    fn intern_target_property_atoms(&self, mime: &[u8], suffix: &[u8]) -> (x::Atom, x::Atom) {
+        let target = self
+            .connection
+            .wait_for_reply(self.connection.send_request(&x::InternAtom {
+                only_if_exists: false,
+                name: mime,
+            }))
+            .unwrap()
+            .atom();
+        let property = self
+            .connection
+            .wait_for_reply(self.connection.send_request(&x::InternAtom {
+                only_if_exists: false,
+                name: &[mime, suffix].concat(),
+            }))
+            .unwrap()
+            .atom();
+        (target, property)
+    }
+
     pub(crate) fn set_clipboard(&mut self, selection: ForeignSelection<Clipboard>) {
         let mut utf8_xwl = false;
         let mut utf8_wl = false;
@@ -477,17 +525,12 @@ impl XState {
                     _ => {}
                 }
 
-                let atom = self
-                    .connection
-                    .wait_for_reply(self.connection.send_request(&x::InternAtom {
-                        only_if_exists: false,
-                        name: mime.as_bytes(),
-                    }))
-                    .unwrap();
-
+                let (target, property) =
+                    self.intern_target_property_atoms(mime.as_bytes(), b"_CLIPBOARD");
                 SelectionTargetId {
                     name: mime.clone(),
-                    atom: atom.atom(),
+                    target,
+                    property,
                     source: None,
                 }
             })
@@ -495,17 +538,12 @@ impl XState {
 
         if utf8_wl && !utf8_xwl {
             let name = "UTF8_STRING".to_string();
-            let atom = self
-                .connection
-                .wait_for_reply(self.connection.send_request(&x::InternAtom {
-                    only_if_exists: false,
-                    name: name.as_bytes(),
-                }))
-                .unwrap()
-                .atom();
+            let (target, property) =
+                self.intern_target_property_atoms(name.as_bytes(), b"_CLIPBOARD");
             mimes.push(SelectionTargetId {
                 name,
-                atom,
+                target,
+                property,
                 source: Some("text/plain;charset=utf-8".to_string()),
             });
         }
@@ -533,17 +571,12 @@ impl XState {
                     _ => {}
                 }
 
-                let atom = self
-                    .connection
-                    .wait_for_reply(self.connection.send_request(&x::InternAtom {
-                        only_if_exists: false,
-                        name: mime.as_bytes(),
-                    }))
-                    .unwrap();
-
+                let (target, property) =
+                    self.intern_target_property_atoms(mime.as_bytes(), b"_PRIMARY");
                 SelectionTargetId {
                     name: mime.clone(),
-                    atom: atom.atom(),
+                    target,
+                    property,
                     source: None,
                 }
             })
@@ -551,17 +584,12 @@ impl XState {
 
         if utf8_wl && !utf8_xwl {
             let name = "UTF8_STRING".to_string();
-            let atom = self
-                .connection
-                .wait_for_reply(self.connection.send_request(&x::InternAtom {
-                    only_if_exists: false,
-                    name: name.as_bytes(),
-                }))
-                .unwrap()
-                .atom();
+            let (target, property) =
+                self.intern_target_property_atoms(name.as_bytes(), b"_PRIMARY");
             mimes.push(SelectionTargetId {
                 name,
-                atom,
+                target,
+                property,
                 source: Some("text/plain;charset=utf-8".to_string()),
             });
         }
@@ -736,19 +764,4 @@ impl XState {
         }
         false
     }
-}
-
-fn get_property_any(
-    connection: &xcb::Connection,
-    window: x::Window,
-    property: x::Atom,
-) -> xcb::Result<x::GetPropertyReply> {
-    connection.wait_for_reply(connection.send_request(&x::GetProperty {
-        delete: true,
-        window,
-        property,
-        r#type: x::ATOM_ANY,
-        long_offset: 0,
-        long_length: u32::MAX,
-    }))
 }
