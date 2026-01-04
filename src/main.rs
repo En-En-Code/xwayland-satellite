@@ -67,7 +67,7 @@ impl xwayland_satellite::RunData for RealData {
         for protocol in self.listen_plus.iter() {
             ret.extend(["-listen", protocol]);
         }
-        for protocol in self.extension_minus.iter() {
+        for protocol in self.listen_minus.iter() {
             ret.extend(["-nolisten", protocol]);
         }
         ret.into_iter().map(str::to_string).collect()
