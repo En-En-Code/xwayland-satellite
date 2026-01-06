@@ -19,6 +19,7 @@ struct RealData {
     extension_minus: Vec<String>,
     listen_plus: Vec<String>,
     listen_minus: Vec<String>,
+    verbosity: u32,
 }
 impl Default for RealData {
     fn default() -> Self {
@@ -33,6 +34,7 @@ impl Default for RealData {
             extension_minus: vec![],
             listen_plus: vec![],
             listen_minus: vec![],
+            verbosity: 0,
         }
     }
 }
@@ -70,6 +72,8 @@ impl xwayland_satellite::RunData for RealData {
         for protocol in self.listen_minus.iter() {
             ret.extend(["-nolisten", protocol]);
         }
+        let verbosity = self.verbosity.to_string();
+        ret.extend(["-verbose", &verbosity]);
         ret.into_iter().map(str::to_string).collect()
     }
 }
@@ -107,13 +111,15 @@ fn parse_args() -> RealData {
                 // X.org lets you pass multiple `-auth` parameters but only uses the last one.
                 // This is unintuitive enough that passing multiple `-auth` should be an error.
                 if data.auth_file.is_some() {
-                    panic!("Multiple authorization files passed");
+                    panic!("Multiple `-auth` flags passed");
                 }
                 let Some(file) = args.get(i + 1) else {
                     panic!("No authorization file passed");
                 };
-                // TODO: Validate the auth file (because X.org for some reason does not fail on
-                // invalid authorization files)
+                std::fs::OpenOptions::new()
+                    .read(true)
+                    .open(file)
+                    .expect("Could not open authorization file");
                 data.auth_file = Some(file.to_owned());
                 i += 2;
             }
@@ -135,10 +141,13 @@ fn parse_args() -> RealData {
                 let ext = args
                     .get(i + 1)
                     .expect("argument to -extension not provided");
-                if let Some(idx) = data.extension_plus.iter().position(|e| e == ext) {
-                    data.extension_plus.swap_remove(idx);
+                // Do not disable essential extensions (see XState::new for this list)
+                if !["COMPOSITE", "RANDR", "XFIXES", "X-Resource"].contains(&&ext[..]) {
+                    if let Some(idx) = data.extension_plus.iter().position(|e| e == ext) {
+                        data.extension_plus.swap_remove(idx);
+                    }
+                    data.extension_minus.push(ext.to_owned());
                 }
-                data.extension_minus.push(ext.to_owned());
                 i += 2;
             }
             "-help" => {
@@ -204,6 +213,15 @@ fn parse_args() -> RealData {
                 i += 2;
             }
             "--test-listenfd-support" => std::process::exit(0),
+            "-verbose" => {
+                if let Some(v) = args.get(i + 1).and_then(|n| n.parse::<u32>().ok()) {
+                    data.verbosity = v;
+                    i += 2;
+                } else {
+                    data.verbosity += 1;
+                    i += 1;
+                }
+            }
             "-version" => {
                 println!("{}", xwayland_satellite::version());
                 std::process::exit(0);
